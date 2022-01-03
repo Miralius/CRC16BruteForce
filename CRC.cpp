@@ -1,4 +1,4 @@
-#include<iostream>
+п»ї#include<iostream>
 #include<fstream>
 #include<sstream>
 #include<iomanip>
@@ -95,30 +95,30 @@ template <typename T> vector<T> loadingFile(string nameFile)
 			vectorName.push_back(buffer);
 		}
 		in.close();
-		if (vectorName.size() == 0) error("Файл " + nameFile + " пуст или содержит неверные данные!");
+		if (vectorName.size() == 0) error("Р¤Р°Р№Р» " + nameFile + " РїСѓСЃС‚ РёР»Рё СЃРѕРґРµСЂР¶РёС‚ РЅРµРІРµСЂРЅС‹Рµ РґР°РЅРЅС‹Рµ!");
 	}
-	else if (nameFile != "Progress.txt") error("Файл " + nameFile + " не найден!");
+	else if (nameFile != "Progress.txt") error("Р¤Р°Р№Р» " + nameFile + " РЅРµ РЅР°Р№РґРµРЅ!");
 	return vectorName;
 }
 
 template <typename T> void writingFile(vector<T> date, string nameFile)
 {
 	ofstream output(nameFile, ios_base::app);
-	if (!output) error("Запись в файл " + nameFile + " невозможна!");
+	if (!output) error("Р—Р°РїРёСЃСЊ РІ С„Р°Р№Р» " + nameFile + " РЅРµРІРѕР·РјРѕР¶РЅР°!");
 	for (int i = 0; i < date.size(); i++) output << date[i];
 }
 
 template <typename T> void writingFile(T date, string nameFile)
 {
 	ofstream output(nameFile, ios_base::app);
-	if (!output) error("Запись в файл " + nameFile + " невозможна!");
+	if (!output) error("Р—Р°РїРёСЃСЊ РІ С„Р°Р№Р» " + nameFile + " РЅРµРІРѕР·РјРѕР¶РЅР°!");
 	output << hex << noshowbase << uppercase << date << endl;
 }
 
 void eraseFile(string nameFile)
 {
 	ofstream output(nameFile);
-	if (!output) error("Невозможно стереть файл " + nameFile + "!");
+	if (!output) error("РќРµРІРѕР·РјРѕР¶РЅРѕ СЃС‚РµСЂРµС‚СЊ С„Р°Р№Р» " + nameFile + "!");
 }
 
 template <typename T> T reflect(T val) restrict(amp, cpu)
@@ -198,7 +198,7 @@ void processing(int NOW, int MAX)
 		maxf = MAX;
 		proc = trunc(10000 * (nowf / maxf)) / 100;
 	}
-	cout << '\r' << "Выполнено: " << dec << setw(6) << proc << "% Найдено комбинаций: " << countResults;
+	cout << '\r' << "Р’С‹РїРѕР»РЅРµРЅРѕ: " << dec << setw(6) << proc << "% РќР°Р№РґРµРЅРѕ РєРѕРјР±РёРЅР°С†РёР№: " << countResults;
 }
 
 void calculateCRCwithGPU(string nameInputFile1, string nameInputFile2, string nameInputFile3, string nameInputFile4, string nameOutputFile, unsigned int resultCRC1, unsigned int resultCRC2, unsigned int resultCRC3, unsigned int resultCRC4, unsigned int resultCRC1SVOP, unsigned int resultCRC2SVOP, unsigned int resultCRC3SVOP, unsigned int resultCRC4SVOP, unsigned int finalXorVal, int inputReflected, int resultReflected)
@@ -260,7 +260,7 @@ void calculateCRCwithGPU(string nameInputFile1, string nameInputFile2, string na
 					unsigned int sum4 = Compute_CRC16_Simple(bytes4, results.at(i).p(), initValue, finalXorVal, resultReflected);
 					if (((sum2 == resultCRC2) && (sum3 == resultCRC3) && (sum4 == resultCRC4)) || ((sum2 == resultCRC2SVOP) && (sum3 == resultCRC3SVOP) && (sum4 == resultCRC4SVOP)))
 					{
-						cout << endl << "Найдена комбинация! Polynome: " << hex << uppercase << showbase << results.at(i).p() << " initVal: " << initValue << " finalXorValue: " << finalXorVal << dec << " inputReflected: " << inputReflected << " resultReflected: " << resultReflected << endl;
+						cout << endl << "РќР°Р№РґРµРЅР° РєРѕРјР±РёРЅР°С†РёСЏ! Polynome: " << hex << uppercase << showbase << results.at(i).p() << " initVal: " << initValue << " finalXorValue: " << finalXorVal << dec << " inputReflected: " << inputReflected << " resultReflected: " << resultReflected << endl;
 						crc16 result(results.at(i).p(), initValue, finalXorVal, inputReflected, resultReflected);
 						finalResults.push_back(result);
 						countResults++;
@@ -296,13 +296,13 @@ int main()
 	SetConsoleCP(1251);
 	SetConsoleOutputCP(1251);
 	try {
-		cout << "CRC-16… " << endl;
+		cout << "CRC-16вЂ¦ " << endl;
 		while (1)
 		{
 			vector<unsigned int> xorvalue = loadingFile<unsigned int>("Progress.txt");
 			if (xorvalue.size() != 0)
 			{
-				cout << "Размер передаваемых порций в видеокарту 65536*";
+				cout << "Р Р°Р·РјРµСЂ РїРµСЂРµРґР°РІР°РµРјС‹С… РїРѕСЂС†РёР№ РІ РІРёРґРµРѕРєР°СЂС‚Сѓ 65536*";
 				int sizeOfPartsGPU;
 				cin >> sizeOfPartsGPU;
 				sizeOfParts = sizeOfPartsGPU;
@@ -310,7 +310,7 @@ int main()
 			}
 			else
 			{
-				cout << "Размер передаваемых порций в видеокарту 65536*";
+				cout << "Р Р°Р·РјРµСЂ РїРµСЂРµРґР°РІР°РµРјС‹С… РїРѕСЂС†РёР№ РІ РІРёРґРµРѕРєР°СЂС‚Сѓ 65536*";
 				int sizeOfPartsGPU;
 				cin >> sizeOfPartsGPU;
 				sizeOfParts = sizeOfPartsGPU;
@@ -319,11 +319,11 @@ int main()
 		}
 	}
 	catch (runtime_error & e) {
-		cerr << "Ошибка! " << e.what() << endl;
+		cerr << "РћС€РёР±РєР°! " << e.what() << endl;
 	}
 	catch (...)
 	{
-		cerr << "Неизвестная ошибка!" << endl;
+		cerr << "РќРµРёР·РІРµСЃС‚РЅР°СЏ РѕС€РёР±РєР°!" << endl;
 	}
 	return 0;
 }
