@@ -109,7 +109,7 @@ std::ostream& operator<<(std::ostream& out, const CRC16& data)
         << "Init value: " << data.getInitValue() << ' '
         << "Final XOR value: " << data.getFinalXORValue() << ' ' << std::dec
         << "Input reflected: " << (data.isInputReflected() ? "yes" : "no") << ' '
-        << "Result reflected:" << (data.isResultReflected() ? "yes" : "no");
+        << "Result reflected: " << (data.isResultReflected() ? "yes" : "no");
 }
 
 enum class inputResultReflected
@@ -159,7 +159,6 @@ __device__ uint16_t ComputeCRC16(const uint8_t* bytes, const size_t byteNumber, 
     return (crc ^ finalXorValue);
 }
 
-// Error! Invalid configuration argument. Fix it!
 __global__ void findCRC16Parameters(const uint8_t* data1, const uint8_t* data2, const uint8_t* data3,
     const uint8_t* data4, const uint8_t* reflectedData1, const uint8_t* reflectedData2, const uint8_t* reflectedData3,
     const uint8_t* reflectedData4, const uint16_t* crcs, const size_t size1, const size_t size2, const size_t size3,
@@ -190,7 +189,7 @@ __global__ void findCRC16Parameters(const uint8_t* data1, const uint8_t* data2, 
 }
 
 template <class T, class StringType>
-cudaError_t cudaMallocAndMemcpyData(T* pointer, const T& data, StringType&& string)
+cudaError_t cudaMallocAndMemcpyData(T*& pointer, const T& data, StringType&& string)
 {
     cudaError_t cudaStatus{};
     cudaStatus = cudaMalloc(&pointer, sizeof(T));
@@ -202,7 +201,7 @@ cudaError_t cudaMallocAndMemcpyData(T* pointer, const T& data, StringType&& stri
 }
 
 template <class T, class StringType>
-cudaError_t cudaMallocAndMemcpyData(T* pointer, const std::vector<T>& data, StringType&& string)
+cudaError_t cudaMallocAndMemcpyData(T*& pointer, const std::vector<T>& data, StringType&& string)
 {
     cudaError_t cudaStatus{};
     cudaStatus = cudaMalloc(&pointer, data.size() * sizeof(T));
@@ -214,7 +213,7 @@ cudaError_t cudaMallocAndMemcpyData(T* pointer, const std::vector<T>& data, Stri
 }
 
 template <class T, class StringType>
-void cudaMallocAndMemcpyData(T** pointers, const std::vector<std::vector<T>>& vectors, StringType&& string)
+void cudaMallocAndMemcpyData(T**& pointers, const std::vector<std::vector<T>>& vectors, StringType&& string)
 {
     for (uint8_t currentPointerNumber{}; currentPointerNumber < vectors.size(); currentPointerNumber++)
     {
@@ -282,11 +281,11 @@ CRC16 bruteForceCRC16WithGPU(const uint16_t finalXORValue, const std::vector<std
         uint16_t polynomeCount{ 0xFFFFu };
         uint16_t initValueCount{ 0xFFFFu };
         uint8_t inputOrResultReflectedCombinationCount{ 4u };
-        dim3 threadPerBlock(32u, 32u, 1u);
+        dim3 threadPerBlock(32u, 16u, 1u);
         dim3 blocks(polynomeCount / threadPerBlock.x, initValueCount / threadPerBlock.y,
             inputOrResultReflectedCombinationCount / threadPerBlock.z);
 
-        findCRC16Parameters<<<threadPerBlock, blocks>>>(dataPointers[0], dataPointers[1], dataPointers[2],
+        findCRC16Parameters<<<blocks, threadPerBlock>>>(dataPointers[0], dataPointers[1], dataPointers[2],
             dataPointers[3], reflectedDataPointers[0], reflectedDataPointers[1], reflectedDataPointers[2],
             reflectedDataPointers[3], crcsPointer, sizes[0], sizes[1], sizes[2], sizes[3], finalXORValue, result);
 
@@ -302,8 +301,8 @@ CRC16 bruteForceCRC16WithGPU(const uint16_t finalXORValue, const std::vector<std
             throw std::runtime_error("cudaDeviceSynchronize failed!\n"s + cudaGetErrorString(cudaStatus));
         }
 
-        CRC16* computedResult = 0;
-        cudaStatus = cudaMemcpy(computedResult, result, sizeof(CRC16), cudaMemcpyDeviceToHost);
+        CRC16 computedResult{};
+        cudaStatus = cudaMemcpy(&computedResult, result, sizeof(CRC16), cudaMemcpyDeviceToHost);
         if (cudaStatus != cudaSuccess)
         {
             throw std::runtime_error("cudaMemcpy for computed result failed!\n"s + cudaGetErrorString(cudaStatus));
@@ -325,7 +324,7 @@ CRC16 bruteForceCRC16WithGPU(const uint16_t finalXORValue, const std::vector<std
             throw cudaDeviceResetException("cudaDeviceReset failed!\n"s + cudaGetErrorString(cudaStatus));
         }
 
-        return *computedResult;
+        return computedResult;
     }
     catch (std::runtime_error ex)
     {
@@ -390,9 +389,9 @@ void calculateCRC16WithGPU(std::vector<std::vector<uint8_t>>&& data, std::vector
             std::cout << result << '\n';
             addEntryIntoFile(std::move(result), "Results.txt"s);
         }
-        auto percent = std::trunc(10000 * (static_cast<float>(finalXORValue) / 0xFFFFu)) / 100;
-        std::cout << '\r' << "Completed: " << std::dec << std::setw(6) << percent << '%';
-        if (finalXORValue == 0x0u)
+        auto percent = overflowed ? std::trunc(10000 * (static_cast<float>(finalXORValue) / 0xFFFFu)) / 100 : 0;
+        std::cout << '\r' << "Completed: " << std::dec << std::setw(6) << percent << "% ";
+        if (finalXORValue == 0xFFFFu)
         {
             overflowed = true;
         }
