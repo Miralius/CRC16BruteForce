@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33530.505
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CRC16BruteForceWithGPU", "CRC16BruteForceWithGPU.vcxproj", "{CEB6B4E0-6665-43DE-90D9-628BA8AD27DE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CEB6B4E0-6665-43DE-90D9-628BA8AD27DE}.Debug|x64.ActiveCfg = Debug|x64
+		{CEB6B4E0-6665-43DE-90D9-628BA8AD27DE}.Debug|x64.Build.0 = Debug|x64
+		{CEB6B4E0-6665-43DE-90D9-628BA8AD27DE}.Release|x64.ActiveCfg = Release|x64
+		{CEB6B4E0-6665-43DE-90D9-628BA8AD27DE}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {BC4872B9-A6FA-4BE8-85E5-9CCD1239159F}
+	EndGlobalSection
+EndGlobal
