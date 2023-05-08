@@ -168,7 +168,7 @@ __device__ uint16_t ComputeCRC16(const uint8_t* bytes, const size_t byteNumber, 
 __global__ void findCRC16Parameters(const uint8_t* data1, const uint8_t* data2, const uint8_t* data3,
     const uint8_t* data4, const uint8_t* reflectedData1, const uint8_t* reflectedData2, const uint8_t* reflectedData3,
     const uint8_t* reflectedData4, const uint16_t* crcs, const size_t size1, const size_t size2, const size_t size3,
-    const size_t size4, const uint16_t finalXORValue, CRC16* result)
+    const size_t size4, const uint16_t finalXORValue, CRC16* result, size_t* combinationNumber)
 {
     uint16_t polynome = blockIdx.x * blockDim.x + threadIdx.x;
     uint16_t initValue = blockIdx.y * blockDim.y + threadIdx.y;
@@ -190,6 +190,7 @@ __global__ void findCRC16Parameters(const uint8_t* data1, const uint8_t* data2, 
         && ComputeCRC16(inputReflected ? reflectedData4 : data4, size4, polynome, initValue, finalXORValue,
             resultReflected) == crcs[3])
     {
+        atomicAdd(combinationNumber, 1);
         *result = CRC16(polynome, initValue, finalXORValue, inputReflected, resultReflected);
     }
 }
@@ -339,6 +340,7 @@ CRC16 bruteForceCRC16WithGPU(const uint16_t finalXORValue, const std::vector<std
     cudaError_t cudaStatus{};
     uint16_t* crcsPointer{};
     CRC16* result{};
+    size_t* combinationNumberPtr{};
     auto sizes = new size_t[4];
     auto dataPointers = new uint8_t*[4];
     auto reflectedDataPointers = new uint8_t*[4];
@@ -364,11 +366,18 @@ CRC16 bruteForceCRC16WithGPU(const uint16_t finalXORValue, const std::vector<std
             throw std::runtime_error("cudaMemcpy for crcs failed!\n"s + cudaGetErrorString(cudaStatus));
         }
 
-        CRC16 defaultCRC16Value{};
-        cudaStatus = cudaMallocAndMemcpyData(result, defaultCRC16Value, "result"s);
+        CRC16 computedResult{};
+        cudaStatus = cudaMallocAndMemcpyData(result, computedResult, "result"s);
         if (cudaStatus != cudaSuccess)
         {
             throw std::runtime_error("cudaMemcpy for result failed!\n"s + cudaGetErrorString(cudaStatus));
+        }
+
+        size_t combinationNumber{};
+        cudaStatus = cudaMallocAndMemcpyData(combinationNumberPtr, combinationNumber, "combination number"s);
+        if (cudaStatus != cudaSuccess)
+        {
+            throw std::runtime_error("cudaMemcpy for combination number failed!\n"s + cudaGetErrorString(cudaStatus));
         }
 
         uint16_t polynomeCount{ UINT16_MAX };
@@ -380,7 +389,8 @@ CRC16 bruteForceCRC16WithGPU(const uint16_t finalXORValue, const std::vector<std
 
         findCRC16Parameters<<<blocks, threadPerBlock>>>(dataPointers[0], dataPointers[1], dataPointers[2],
             dataPointers[3], reflectedDataPointers[0], reflectedDataPointers[1], reflectedDataPointers[2],
-            reflectedDataPointers[3], crcsPointer, sizes[0], sizes[1], sizes[2], sizes[3], finalXORValue, result);
+            reflectedDataPointers[3], crcsPointer, sizes[0], sizes[1], sizes[2], sizes[3], finalXORValue, result,
+            combinationNumberPtr);
 
         cudaStatus = cudaGetLastError();
         if (cudaStatus != cudaSuccess)
@@ -394,15 +404,26 @@ CRC16 bruteForceCRC16WithGPU(const uint16_t finalXORValue, const std::vector<std
             throw std::runtime_error("cudaDeviceSynchronize failed!\n"s + cudaGetErrorString(cudaStatus));
         }
 
-        CRC16 computedResult{};
         cudaStatus = cudaMemcpy(&computedResult, result, sizeof(CRC16), cudaMemcpyDeviceToHost);
         if (cudaStatus != cudaSuccess)
         {
             throw std::runtime_error("cudaMemcpy for computed result failed!\n"s + cudaGetErrorString(cudaStatus));
         }
 
+        cudaStatus = cudaMemcpy(&combinationNumber, combinationNumberPtr, sizeof(size_t), cudaMemcpyDeviceToHost);
+        if (cudaStatus != cudaSuccess)
+        {
+            throw std::runtime_error("cudaMemcpy for combination number failed!\n"s + cudaGetErrorString(cudaStatus));
+        }
+
+        if (combinationNumber > 1)
+        {
+            throw std::runtime_error("Two or more combination were found!\n");
+        }
+
         cudaFree(result);
         cudaFree(crcsPointer);
+        cudaFree(combinationNumberPtr);
         for (uint8_t currentPointerNumber{}; currentPointerNumber < data.size(); currentPointerNumber++)
         {
             cudaFree(dataPointers[currentPointerNumber]);
@@ -423,6 +444,7 @@ CRC16 bruteForceCRC16WithGPU(const uint16_t finalXORValue, const std::vector<std
     {
         cudaFree(result);
         cudaFree(crcsPointer);
+        cudaFree(combinationNumberPtr);
         for (uint8_t currentPointerNumber{}; currentPointerNumber < data.size(); currentPointerNumber++)
         {
             cudaFree(dataPointers[currentPointerNumber]);
