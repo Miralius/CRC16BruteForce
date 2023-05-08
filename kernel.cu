@@ -391,7 +391,7 @@ CRC16 bruteForceCRC16WithGPU(const uint16_t finalXORValue, const std::vector<std
         uint16_t polynomeCount{ 0xFFFFu };
         uint16_t initValueCount{ 0xFFFFu };
         uint8_t inputOrResultReflectedCombinationCount{ 4u };
-        dim3 threadPerBlock(32u, 16u, 1u);
+        dim3 threadPerBlock(32u, 32u, 1u);
         dim3 blocks(polynomeCount / threadPerBlock.x, initValueCount / threadPerBlock.y,
             inputOrResultReflectedCombinationCount / threadPerBlock.z);
 
