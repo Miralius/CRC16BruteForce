@@ -11,12 +11,17 @@ using namespace std::string_literals;
 class cudaDeviceResetException : public std::exception
 {
 public:
-    //  TODO: Fix template
-    //  template <class StringType>
-    //  cudaDeviceResetException(StringType&& exceptionDescription)
-    //      : std::exception(std::forward<StringType>(exceptionDescription).c_str())
-    cudaDeviceResetException(const std::string& exceptionDescription)
-        : std::exception(exceptionDescription.c_str())
+    template <
+        class StringType, 
+        typename = std::enable_if_t
+            <!std::is_base_of
+                <cudaDeviceResetException,
+                std::decay_t<StringType>
+            >::value
+        >
+    >
+    cudaDeviceResetException(StringType&& exceptionDescription)
+        : std::exception(std::forward<StringType>(exceptionDescription).c_str())
     {}
 };
 
