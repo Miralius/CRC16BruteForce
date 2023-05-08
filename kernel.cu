@@ -3,6 +3,7 @@
 #include <fstream>
 #include <string>
 #include <iomanip>
+#include <chrono>
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
@@ -328,7 +329,7 @@ void eraseFileAndWriteValueInHEX(T&& data, StringType&& nameFile)
         output.close();
         throw std::runtime_error("Writing into file " + std::forward<StringType>(nameFile) + " is impossible!");
     }
-    output << std::noshowbase << std::hex << std::uppercase << std::move(data) << '\n';
+    output << std::noshowbase << std::hex << std::uppercase << std::move(data);
     output.close();
 }
 
@@ -338,9 +339,9 @@ CRC16 bruteForceCRC16WithGPU(const uint16_t finalXORValue, const std::vector<std
     cudaError_t cudaStatus{};
     uint16_t* crcsPointer{};
     CRC16* result{};
-    auto sizes = new size_t[4u];
-    auto dataPointers = new uint8_t*[4u];
-    auto reflectedDataPointers = new uint8_t*[4u];
+    auto sizes = new size_t[4];
+    auto dataPointers = new uint8_t*[4];
+    auto reflectedDataPointers = new uint8_t*[4];
     try
     {
         cudaStatus = cudaSetDevice(0);
@@ -370,10 +371,10 @@ CRC16 bruteForceCRC16WithGPU(const uint16_t finalXORValue, const std::vector<std
             throw std::runtime_error("cudaMemcpy for result failed!\n"s + cudaGetErrorString(cudaStatus));
         }
 
-        uint16_t polynomeCount{ 0xFFFFu };
-        uint16_t initValueCount{ 0xFFFFu };
-        uint8_t inputOrResultReflectedCombinationCount{ 4u };
-        dim3 threadPerBlock(32u, 32u, 1u);
+        uint16_t polynomeCount{ UINT16_MAX };
+        uint16_t initValueCount{ UINT16_MAX };
+        uint8_t inputOrResultReflectedCombinationCount{ 4 };
+        dim3 threadPerBlock(32, 32, 1);
         dim3 blocks(polynomeCount / threadPerBlock.x, initValueCount / threadPerBlock.y,
             inputOrResultReflectedCombinationCount / threadPerBlock.z);
 
@@ -463,6 +464,41 @@ std::vector<T> reflect(const std::vector<T>& values)
     return reflected;
 }
 
+template <class T>
+void showProgress(const T completed, const T total)
+{
+    auto percent = std::trunc(10000 * (static_cast<float>(completed) / total)) / 100;
+    std::cout << '\r' << "Completed: " << std::dec << std::setw(6) << percent << '%';
+}
+
+template <class TimePointType, class IntType>
+void showRemainingExecutionTime(TimePointType&& start, TimePointType&& end, const IntType remainingOperationNumber)
+{
+    using namespace std::chrono;
+    using namespace std::chrono_literals;
+    auto durationInSeconds = duration_cast<seconds>(end - start) * remainingOperationNumber;
+    if (durationInSeconds != 0s)
+    {
+        std::cout << "Remaining time: " << std::dec;
+        auto durationInHours = duration_cast<hours>(durationInSeconds);
+        if (durationInHours != 0h)
+        {
+            std::cout << std::setw(6) << durationInHours.count() << "h, ";
+            durationInSeconds -= duration_cast<seconds>(durationInHours);
+        }
+        auto durationInMinutes = duration_cast<minutes>(durationInSeconds);
+        if (durationInMinutes != 0min || durationInHours != 0h)
+        {
+            std::cout << std::setw(2) << durationInMinutes.count() << "min, ";
+            durationInSeconds -= duration_cast<seconds>(durationInMinutes);
+        }
+        if (durationInSeconds != 0s || durationInMinutes != 0min || durationInHours != 0h)
+        {
+            std::cout << std::setw(2) << durationInSeconds.count() << "s";
+        }
+    }
+}
+
 void calculateCRC16WithGPU(std::vector<std::vector<uint8_t>>&& data, std::vector<uint16_t>&& crcs)
 {
     std::vector<std::vector<uint8_t>> reflectedData
@@ -473,7 +509,7 @@ void calculateCRC16WithGPU(std::vector<std::vector<uint8_t>>&& data, std::vector
         reflect(data.at(3))
     };
     bool overflowed{};
-    uint16_t finalXORValue{ 0xFFFFu };
+    uint16_t finalXORValue{ UINT16_MAX };
     auto progressFileName = "Progress.txt"s;
     try {
         finalXORValue = loadingValueFromFileInHEX<uint16_t>(progressFileName);
@@ -481,11 +517,15 @@ void calculateCRC16WithGPU(std::vector<std::vector<uint8_t>>&& data, std::vector
     }
     catch (std::runtime_error ex)
     {}
-    for (; XNOR(finalXORValue < 0xFFFFu, overflowed); finalXORValue++)
+    std::chrono::steady_clock::time_point start{};
+    std::chrono::steady_clock::time_point end{};
+    for (; XNOR(finalXORValue < UINT16_MAX, overflowed); finalXORValue++)
     {
-        auto percent = overflowed ? std::trunc(10000 * (static_cast<float>(finalXORValue) / 0xFFFFu)) / 100 : 0;
-        std::cout << '\r' << "Completed: " << std::dec << std::setw(6) << percent << "% Final XOR value: "
-            << std::noshowbase << std::hex << std::uppercase << finalXORValue;
+        uint16_t completed = overflowed ? finalXORValue : 0;
+        showProgress(completed, UINT16_MAX);
+        std::cout << " Final XOR value: " << std::noshowbase << std::hex << std::uppercase << finalXORValue << ' ';
+        showRemainingExecutionTime(std::move(start), std::move(end), static_cast<uint16_t>(UINT16_MAX - completed));
+        start = std::chrono::steady_clock::now();
         eraseFileAndWriteValueInHEX(finalXORValue, progressFileName);
         auto result = bruteForceCRC16WithGPU(finalXORValue, data, reflectedData, crcs);
         if (result.isInitialized())
@@ -493,10 +533,11 @@ void calculateCRC16WithGPU(std::vector<std::vector<uint8_t>>&& data, std::vector
             std::cout << '\n' << result << '\n';
             addEntryIntoFile(std::move(result), "Results.txt"s);
         }
-        if (finalXORValue == 0xFFFFu)
+        if (finalXORValue == UINT16_MAX)
         {
             overflowed = true;
         }
+        end = std::chrono::steady_clock::now();
     }
 }
 
