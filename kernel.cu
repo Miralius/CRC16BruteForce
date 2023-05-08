@@ -239,7 +239,7 @@ T loadingValueFromFileInHEX(StringType&& nameFile)
     T value{};
     if (!in.fail())
     {
-        in >> value;
+        in >> std::hex >> std::uppercase >> value;
         in.close();
     }
     else
@@ -320,7 +320,7 @@ void addEntryIntoFile(CRC16&& data, StringType&& nameFile)
 }
 
 template <class T, typename StringType>
-void eraseFileAndWriteValue(T&& data, StringType&& nameFile)
+void eraseFileAndWriteValueInHEX(T&& data, StringType&& nameFile)
 {
     std::ofstream output(nameFile);
     if (!output)
@@ -328,7 +328,7 @@ void eraseFileAndWriteValue(T&& data, StringType&& nameFile)
         output.close();
         throw std::runtime_error("Writing into file " + std::forward<StringType>(nameFile) + " is impossible!");
     }
-    output << std::move(data) << '\n';
+    output << std::noshowbase << std::hex << std::uppercase << std::move(data) << '\n';
     output.close();
 }
 
@@ -483,20 +483,20 @@ void calculateCRC16WithGPU(std::vector<std::vector<uint8_t>>&& data, std::vector
     {}
     for (; XNOR(finalXORValue < 0xFFFFu, overflowed); finalXORValue++)
     {
+        auto percent = overflowed ? std::trunc(10000 * (static_cast<float>(finalXORValue) / 0xFFFFu)) / 100 : 0;
+        std::cout << '\r' << "Completed: " << std::dec << std::setw(6) << percent << "% Final XOR value: "
+            << std::noshowbase << std::hex << std::uppercase << finalXORValue;
+        eraseFileAndWriteValueInHEX(finalXORValue, progressFileName);
         auto result = bruteForceCRC16WithGPU(finalXORValue, data, reflectedData, crcs);
         if (result.isInitialized())
         {
             std::cout << '\n' << result << '\n';
             addEntryIntoFile(std::move(result), "Results.txt"s);
         }
-        auto percent = overflowed ? std::trunc(10000 * (static_cast<float>(finalXORValue) / 0xFFFFu)) / 100 : 0;
-        std::cout << '\r' << "Completed: " << std::dec << std::setw(6) << percent << "% Final XOR value: "
-            << std::noshowbase << std::hex << std::uppercase << finalXORValue;
         if (finalXORValue == 0xFFFFu)
         {
             overflowed = true;
         }
-        eraseFileAndWriteValue(finalXORValue, progressFileName);
     }
 }
 
