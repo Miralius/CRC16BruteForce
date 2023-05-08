@@ -69,6 +69,9 @@ private:
     bool resultReflected{};
     bool initialized{};
 public:
+    class device_type{};
+    class host_type{};
+
     uint16_t getPolynome() const noexcept
     {
         return polynome;
@@ -97,7 +100,17 @@ public:
     CRC16() = default;
 
     __device__ CRC16(const uint16_t polynome, const uint16_t initValue, const uint16_t finalXORValue,
-        const bool inputReflected, const bool resultReflected) noexcept
+        const bool inputReflected, const bool resultReflected, device_type) noexcept
+        : polynome(polynome)
+        , initValue(initValue)
+        , finalXORValue(finalXORValue)
+        , inputReflected(inputReflected)
+        , resultReflected(resultReflected)
+        , initialized(true)
+    {}
+
+    CRC16(const uint16_t polynome, const uint16_t initValue, const uint16_t finalXORValue,
+        const bool inputReflected, const bool resultReflected, host_type) noexcept
         : polynome(polynome)
         , initValue(initValue)
         , finalXORValue(finalXORValue)
@@ -115,6 +128,43 @@ std::ostream& operator<<(std::ostream& out, const CRC16& data)
         << "Final XOR value: " << data.getFinalXORValue() << ' ' << std::dec
         << "Input reflected: " << (data.isInputReflected() ? "yes" : "no") << ' '
         << "Result reflected: " << (data.isResultReflected() ? "yes" : "no");
+}
+
+bool yesOrNoToBool(const std::string& answer)
+{
+    if (answer == "yes")
+    {
+        return true;
+    }
+    else if (answer == "no")
+    {
+        return false;
+    }
+    else
+    {
+        throw std::invalid_argument("Wrong argument received!");
+    }
+}
+
+std::istream& operator>>(std::istream& in, CRC16& obj)
+{
+    std::string description{};
+    uint16_t polynome{};
+    uint16_t initValue{};
+    uint16_t finalXORValue{};
+    std::string inputReflectedString{};
+    std::string resultReflectedString{};
+    in >> std::noshowbase >> std::hex >> std::uppercase >> description >> polynome >> description
+        >> description >> initValue >> description >> description >> description >> finalXORValue
+        >> description >> description >> inputReflectedString >> description >> description
+        >> resultReflectedString;
+    if (!in)
+    {
+        return in;
+    }
+    obj = CRC16(polynome, initValue, finalXORValue, yesOrNoToBool(inputReflectedString),
+        yesOrNoToBool(resultReflectedString), CRC16::host_type());
+    return in;
 }
 
 enum class inputResultReflected
@@ -189,7 +239,7 @@ __global__ void findCRC16Parameters(const uint8_t* data1, const uint8_t* data2, 
         && ComputeCRC16(inputReflected ? reflectedData4 : data4, size4, polynome, initValue, finalXORValue,
             resultReflected) == crcs[3])
     {
-        *result = CRC16(polynome, initValue, finalXORValue, inputReflected, resultReflected);
+        *result = CRC16(polynome, initValue, finalXORValue, inputReflected, resultReflected, CRC16::device_type());
     }
 }
 
@@ -232,6 +282,61 @@ void cudaMallocAndMemcpyData(T**& pointers, const std::vector<std::vector<T>>& v
     }
 }
 
+template <typename T, typename StringType>
+std::vector<T> loadingFileInHEX(StringType&& nameFile)
+{
+    std::ifstream in(nameFile);
+    auto name = "File "s + std::forward<StringType>(nameFile);
+    std::vector<T> vector;
+    if (!in.fail())
+    {
+        T buffer{};
+        while (in >> std::hex >> std::uppercase >> buffer)
+        {
+            vector.emplace_back(buffer);
+        }
+        in.close();
+    }
+    else
+    {
+        in.close();
+        throw std::runtime_error(name + " is not found!");
+    }
+    if (vector.size() == 0)
+    {
+        throw std::runtime_error(name + " is empty or contains wrong data!");
+    }
+
+    return vector;
+}
+
+template <typename StringType>
+std::vector<uint8_t> loadingBytesInHEXFromFile(StringType&& nameFile)
+{
+    std::ifstream in(nameFile);
+    auto name = "File "s + std::forward<StringType>(nameFile);
+    std::vector<uint8_t> byteVector{};
+    if (!in.fail())
+    {
+        HEXByteSymbol byte{};
+        while (in >> byte)
+        {
+            byteVector.emplace_back(static_cast<uint8_t>(byte));
+        }
+        in.close();
+    }
+    else
+    {
+        in.close();
+        throw std::runtime_error(name + " is not found!");
+    }
+    if (byteVector.size() == 0)
+    {
+        throw std::runtime_error(name + " is empty or contains wrong data!");
+    }
+    return byteVector;
+}
+
 template <typename StringType>
 void addEntryIntoFile(CRC16&& data, StringType&& nameFile)
 {
@@ -239,7 +344,7 @@ void addEntryIntoFile(CRC16&& data, StringType&& nameFile)
     if (!output)
     {
         output.close();
-        throw std::runtime_error("Writing into file " + std::forward<StringType>(nameFile) + " is inpossible!");
+        throw std::runtime_error("Writing into file " + std::forward<StringType>(nameFile) + " is impossible!");
     }
     output << std::move(data) << '\n';
     output.close();
@@ -386,76 +491,35 @@ void calculateCRC16WithGPU(std::vector<std::vector<uint8_t>>&& data, std::vector
         reflect(data.at(3))
     };
     bool overflowed{};
-    for (uint16_t finalXORValue{0xFFFFu}; XNOR(finalXORValue < 0xFFFFu, overflowed); finalXORValue++)
+    uint16_t finalXORValue{ 0xFFFFu };
+    auto resultNameFile = "Results.txt"s;
+    try {
+        auto crcResults = loadingFileInHEX<CRC16>(resultNameFile);
+        if (!crcResults.empty())
+        {
+            const auto& theLastResult = crcResults.back();
+            overflowed = true;
+            finalXORValue = theLastResult.getFinalXORValue();
+        }
+    }
+    catch (std::runtime_error ex)
+    {}
+    for (; XNOR(finalXORValue < 0xFFFFu, overflowed); finalXORValue++)
     {
         auto result = bruteForceCRC16WithGPU(finalXORValue, data, reflectedData, crcs);
         if (result.isInitialized())
         {
-            std::cout << result << '\n';
-            addEntryIntoFile(std::move(result), "Results.txt"s);
+            std::cout << '\n' << result << '\n';
+            addEntryIntoFile(std::move(result), std::move(resultNameFile));
         }
         auto percent = overflowed ? std::trunc(10000 * (static_cast<float>(finalXORValue) / 0xFFFFu)) / 100 : 0;
-        std::cout << '\r' << "Completed: " << std::dec << std::setw(6) << percent << "% ";
+        std::cout << '\r' << "Completed: " << std::dec << std::setw(6) << percent << "% Final XOR value: "
+            << std::noshowbase << std::hex << std::uppercase << finalXORValue;
         if (finalXORValue == 0xFFFFu)
         {
             overflowed = true;
         }
     }
-}
-
-template <typename T, typename StringType>
-std::vector<T> loadingFileInHEX(StringType&& nameFile)
-{
-    std::ifstream in(nameFile);
-    auto name = "File "s + std::forward<StringType>(nameFile);
-    std::vector<T> vector;
-    if (!in.fail())
-    {
-        T buffer{};
-        while (in >> std::hex >> std::uppercase >> buffer)
-        {
-            vector.emplace_back(buffer);
-        }
-        in.close();
-    }
-    else
-    {
-        in.close();
-        throw std::runtime_error(name + " is not found!");
-    }
-    if (vector.size() == 0)
-    {
-        throw std::runtime_error(name + " is empty or contains wrong data!");
-    }
-
-    return vector;
-}
-
-template <typename StringType>
-std::vector<uint8_t> loadingBytesInHEXFromFile(StringType&& nameFile)
-{
-    std::ifstream in(nameFile);
-    auto name = "File "s + std::forward<StringType>(nameFile);
-    std::vector<uint8_t> byteVector{};
-    if (!in.fail())
-    {
-        HEXByteSymbol byte{};
-        while (in >> byte)
-        {
-            byteVector.emplace_back(static_cast<uint8_t>(byte));
-        }
-        in.close();
-    }
-    else
-    {
-        in.close();
-        throw std::runtime_error(name + " is not found!");
-    }
-    if (byteVector.size() == 0)
-    {
-        throw std::runtime_error(name + " is empty or contains wrong data!");
-    }
-    return byteVector;
 }
 
 void initAndStartCalculating()
