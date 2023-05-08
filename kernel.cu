@@ -69,9 +69,6 @@ private:
     bool resultReflected{};
     bool initialized{};
 public:
-    class device_type{};
-    class host_type{};
-
     uint16_t getPolynome() const noexcept
     {
         return polynome;
@@ -100,17 +97,7 @@ public:
     CRC16() = default;
 
     __device__ CRC16(const uint16_t polynome, const uint16_t initValue, const uint16_t finalXORValue,
-        const bool inputReflected, const bool resultReflected, device_type) noexcept
-        : polynome(polynome)
-        , initValue(initValue)
-        , finalXORValue(finalXORValue)
-        , inputReflected(inputReflected)
-        , resultReflected(resultReflected)
-        , initialized(true)
-    {}
-
-    CRC16(const uint16_t polynome, const uint16_t initValue, const uint16_t finalXORValue,
-        const bool inputReflected, const bool resultReflected, host_type) noexcept
+        const bool inputReflected, const bool resultReflected) noexcept
         : polynome(polynome)
         , initValue(initValue)
         , finalXORValue(finalXORValue)
@@ -128,43 +115,6 @@ std::ostream& operator<<(std::ostream& out, const CRC16& data)
         << "Final XOR value: " << data.getFinalXORValue() << ' ' << std::dec
         << "Input reflected: " << (data.isInputReflected() ? "yes" : "no") << ' '
         << "Result reflected: " << (data.isResultReflected() ? "yes" : "no");
-}
-
-bool yesOrNoToBool(const std::string& answer)
-{
-    if (answer == "yes")
-    {
-        return true;
-    }
-    else if (answer == "no")
-    {
-        return false;
-    }
-    else
-    {
-        throw std::invalid_argument("Wrong argument received!");
-    }
-}
-
-std::istream& operator>>(std::istream& in, CRC16& obj)
-{
-    std::string description{};
-    uint16_t polynome{};
-    uint16_t initValue{};
-    uint16_t finalXORValue{};
-    std::string inputReflectedString{};
-    std::string resultReflectedString{};
-    in >> std::noshowbase >> std::hex >> std::uppercase >> description >> polynome >> description
-        >> description >> initValue >> description >> description >> description >> finalXORValue
-        >> description >> description >> inputReflectedString >> description >> description
-        >> resultReflectedString;
-    if (!in)
-    {
-        return in;
-    }
-    obj = CRC16(polynome, initValue, finalXORValue, yesOrNoToBool(inputReflectedString),
-        yesOrNoToBool(resultReflectedString), CRC16::host_type());
-    return in;
 }
 
 enum class inputResultReflected
@@ -239,7 +189,7 @@ __global__ void findCRC16Parameters(const uint8_t* data1, const uint8_t* data2, 
         && ComputeCRC16(inputReflected ? reflectedData4 : data4, size4, polynome, initValue, finalXORValue,
             resultReflected) == crcs[3])
     {
-        *result = CRC16(polynome, initValue, finalXORValue, inputReflected, resultReflected, CRC16::device_type());
+        *result = CRC16(polynome, initValue, finalXORValue, inputReflected, resultReflected);
     }
 }
 
@@ -280,6 +230,25 @@ void cudaMallocAndMemcpyData(T**& pointers, const std::vector<std::vector<T>>& v
                 + std::to_string(currentPointerNumber) + " failed!\n" + cudaGetErrorString(cudaStatus));
         }
     }
+}
+
+template <typename T, typename StringType>
+T loadingValueFromFileInHEX(StringType&& nameFile)
+{
+    std::ifstream in(nameFile);
+    T value{};
+    if (!in.fail())
+    {
+        in >> value;
+        in.close();
+    }
+    else
+    {
+        in.close();
+        throw std::runtime_error(std::forward<StringType>(nameFile) + " is not found!");
+    }
+
+    return value;
 }
 
 template <typename T, typename StringType>
@@ -341,6 +310,19 @@ template <typename StringType>
 void addEntryIntoFile(CRC16&& data, StringType&& nameFile)
 {
     std::ofstream output(nameFile, std::ios_base::app);
+    if (!output)
+    {
+        output.close();
+        throw std::runtime_error("Writing into file " + std::forward<StringType>(nameFile) + " is impossible!");
+    }
+    output << std::move(data) << '\n';
+    output.close();
+}
+
+template <class T, typename StringType>
+void eraseFileAndWriteValue(T&& data, StringType&& nameFile)
+{
+    std::ofstream output(nameFile);
     if (!output)
     {
         output.close();
@@ -492,15 +474,10 @@ void calculateCRC16WithGPU(std::vector<std::vector<uint8_t>>&& data, std::vector
     };
     bool overflowed{};
     uint16_t finalXORValue{ 0xFFFFu };
-    auto resultNameFile = "Results.txt"s;
+    auto progressFileName = "Progress.txt"s;
     try {
-        auto crcResults = loadingFileInHEX<CRC16>(resultNameFile);
-        if (!crcResults.empty())
-        {
-            const auto& theLastResult = crcResults.back();
-            overflowed = true;
-            finalXORValue = theLastResult.getFinalXORValue();
-        }
+        finalXORValue = loadingValueFromFileInHEX<uint16_t>(progressFileName);
+        overflowed = true;
     }
     catch (std::runtime_error ex)
     {}
@@ -510,7 +487,7 @@ void calculateCRC16WithGPU(std::vector<std::vector<uint8_t>>&& data, std::vector
         if (result.isInitialized())
         {
             std::cout << '\n' << result << '\n';
-            addEntryIntoFile(std::move(result), std::move(resultNameFile));
+            addEntryIntoFile(std::move(result), "Results.txt"s);
         }
         auto percent = overflowed ? std::trunc(10000 * (static_cast<float>(finalXORValue) / 0xFFFFu)) / 100 : 0;
         std::cout << '\r' << "Completed: " << std::dec << std::setw(6) << percent << "% Final XOR value: "
@@ -519,6 +496,7 @@ void calculateCRC16WithGPU(std::vector<std::vector<uint8_t>>&& data, std::vector
         {
             overflowed = true;
         }
+        eraseFileAndWriteValue(finalXORValue, progressFileName);
     }
 }
 
