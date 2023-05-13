@@ -5,13 +5,13 @@
 class HEXByteSymbol
 {
 private:
-    char firstSymbol;
-    char secondSymbol;
+    unsigned char firstSymbol;
+    unsigned char secondSymbol;
 
 public:
     inline HEXByteSymbol() = default;
     
-    inline HEXByteSymbol(const char firstSymbol, const char secondSymbol)
+    inline HEXByteSymbol(const unsigned char firstSymbol, const unsigned char secondSymbol)
         : firstSymbol(firstSymbol)
         , secondSymbol(secondSymbol)
     {}
@@ -26,8 +26,8 @@ public:
 
 inline std::istream& operator>>(std::istream& in, HEXByteSymbol& obj)
 {
-    char firstSymbol{};
-    char secondSymbol{};
+    unsigned char firstSymbol{};
+    unsigned char secondSymbol{};
     in >> firstSymbol >> secondSymbol;
     if (!in)
     {
