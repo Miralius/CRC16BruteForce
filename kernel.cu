@@ -34,7 +34,7 @@ __device__ uint16_t ComputeCRC16(const uint8_t* bytes, const size_t byteNumber, 
     auto crc = initValue;
     for (size_t i{}; i < byteNumber; i++)
     {
-        crc ^= (bytes[i] << 8);
+        crc ^= (static_cast<uint16_t>(bytes[i]) << 8);
         for (uint8_t j{}; j < 8; j++)
         {
             if ((crc & 0x8000) != 0)
